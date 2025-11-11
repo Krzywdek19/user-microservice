@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: user-service
+springdoc:
+  swagger-ui:
+    url: /user-service.yaml
+    path: /swagger-ui.html

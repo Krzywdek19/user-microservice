@@ -1,0 +1,415 @@
+openapi: 3.1.0
+info:
+  title: User Service API
+  version: 0.1.0
+  description: |
+    Minimal OpenAPI contract for a user/identity microservice: registration, login, email verification,
+    token refresh/revocation, basic profile, and simple admin endpoints. Comments briefly explain each method.
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: http://localhost:8080
+    description: Local development
+
+# Global auth: access tokens via Bearer JWT
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Authentication and account lifecycle
+  - name: Users
+    description: Endpoints for the current user profile
+  - name: Admin
+    description: Administrative endpoints
+  - name: Public
+    description: Public keys and health endpoints
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new account
+      description: |
+        # NOTE: Creates a new user in *pending* status and sends a verification token via an email adapter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created (pending verification)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: Email already in use
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /auth/verify:
+    post:
+      tags: [Auth]
+      summary: Verify email
+      description: |
+        # NOTE: Confirms user's email using a one-time token; transitions status from *pending* to *active*.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '204': { description: Account verified }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: Invalid or expired token }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user
+      description: |
+        # NOTE: Validates credentials; returns short-lived access token and longer-lived refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Tokens issued
+          headers:
+            X-RateLimit-Limit:
+              description: Request limit for the time window
+              schema: { type: integer }
+            X-RateLimit-Remaining:
+              description: Remaining requests in the current window
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { description: Invalid credentials }
+
+  /auth/token/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: |
+        # NOTE: Exchanges a valid refresh token for a new access/refresh pair; checks for revocation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401': { description: Invalid or revoked refresh token }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout current session
+      description: |
+        # NOTE: Revokes refresh token / session for the authenticated user. Access token should be discarded client-side.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+      responses:
+        '204': { description: Session revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Start password reset
+      description: |
+        # NOTE: Issues a short-lived reset token and triggers an email; response is generic to prevent user enumeration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '204': { description: If email exists, a reset message was sent }
+
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Complete password reset
+      description: |
+        # NOTE: Sets a new password after validating the reset token; invalidates prior sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204': { description: Password changed }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: Invalid or expired reset token }
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      description: |
+        # NOTE: Returns the authenticated user's core and profile fields.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithProfile'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      description: |
+        # NOTE: Allows a whitelisted subset of profile fields to be updated by the user.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWithProfile'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users (admin)
+      description: |
+        # NOTE: Paged list with filters; restricted to admin roles.
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Free-text search on email/name
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, active, locked] }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 200, default: 20 }
+      responses:
+        '200':
+          description: Paged users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPage'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+
+  /admin/users/{id}/status:
+    patch:
+      tags: [Admin]
+      summary: Change user status (admin)
+      description: |
+        # NOTE: Allows admin to lock/unlock accounts; emits domain events.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserStatusPatch'
+      responses:
+        '204': { description: Status updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+        '404': { description: User not found }
+
+  /auth/keys:
+    get:
+      tags: [Public]
+      summary: JWKS public keys
+      description: |
+        # NOTE: Public endpoint exposing JWKS for other services to validate JWT signatures.
+      security: []
+      responses:
+        '200':
+          description: JSON Web Key Set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      description: JWK object
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        status:
+          type: string
+          enum: [pending, active, locked]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, email, status, createdAt, updatedAt]
+
+    Profile:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        locale: { type: string, example: en-US }
+        avatarUrl: { type: string, format: uri }
+
+    UserWithProfile:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        profile: { $ref: '#/components/schemas/Profile' }
+      required: [user]
+
+    RegisterRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8 }
+        locale: { type: string, example: en-US }
+      required: [email, password]
+
+    VerifyRequest:
+      type: object
+      properties:
+        token: { type: string, description: One-time verification token }
+      required: [token]
+
+    LoginRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+      required: [email, password]
+
+    TokenResponse:
+      type: object
+      properties:
+        tokenType: { type: string, example: Bearer }
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: Access token TTL in seconds }
+        refreshToken: { type: string }
+      required: [tokenType, accessToken, expiresIn, refreshToken]
+
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken: { type: string }
+      required: [refreshToken]
+
+    ForgotPasswordRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+      required: [email]
+
+    ResetPasswordRequest:
+      type: object
+      properties:
+        token: { type: string }
+        newPassword: { type: string, format: password, minLength: 8 }
+      required: [token, newPassword]
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        locale: { type: string }
+        avatarUrl: { type: string, format: uri }
+      additionalProperties: false
+
+    AdminUserStatusPatch:
+      type: object
+      properties:
+        status: { type: string, enum: [active, locked] }
+      required: [status]
+
+    UserPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+      required: [items, page, pageSize, total]
+
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              issue: { type: string }
+      required: [code, message]
