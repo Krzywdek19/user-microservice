@@ -5,3 +5,8 @@ springdoc:
   swagger-ui:
     url: /user-service.yaml
     path: /swagger-ui.html
+secret:
+  key: mySuperSecretKey
+  access-duration: 3600
+  refresh-duration: 86400
+  issuer: user-service
