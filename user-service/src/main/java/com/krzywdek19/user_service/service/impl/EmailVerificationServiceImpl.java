@@ -1,10 +1,14 @@
 package com.krzywdek19.user_service.service.impl;
 
+import com.krzywdek19.user_service.exception.InvalidVerificationTokenException;
 import com.krzywdek19.user_service.model.EmailVerificationToken;
 import com.krzywdek19.user_service.model.User;
+import com.krzywdek19.user_service.model.UserStatus;
 import com.krzywdek19.user_service.repository.EmailVerificationTokenRepository;
+import com.krzywdek19.user_service.repository.UserRepository;
 import com.krzywdek19.user_service.service.EmailSenderService;
 import com.krzywdek19.user_service.service.EmailVerificationService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +21,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
     private final EmailVerificationTokenRepository tokenRepository;
     private final EmailSenderService emailSenderService;
+    private final UserRepository userRepository;
 
     @Override
     public void createAndSendVerificationToken(User user) {
@@ -38,7 +43,21 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     }
 
     @Override
+    @Transactional
     public void verify(String token) {
+        var verificationToken = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new InvalidVerificationTokenException("Invalid Verification Token"));
+        if(verificationToken.getUsedAt() != null) {
+            throw new InvalidVerificationTokenException("Token already used");
+        }
 
+        if(verificationToken.getExpiresAt().isBefore(Instant.now())){
+            throw new InvalidVerificationTokenException("Token has expired");
+        }
+        var user = verificationToken.getUser();
+        user.setStatus(UserStatus.ACTIVE);
+        userRepository.save(user);
+
+        tokenRepository.delete(verificationToken);
     }
 }
