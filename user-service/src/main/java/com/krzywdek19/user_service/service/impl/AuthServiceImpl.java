@@ -7,6 +7,7 @@ import com.krzywdek19.user_service.dto.response.UserResponse;
 import com.krzywdek19.user_service.exception.AccountIsNotActiveException;
 import com.krzywdek19.user_service.exception.EmailTakenException;
 import com.krzywdek19.user_service.exception.InvalidCredentialsException;
+import com.krzywdek19.user_service.exception.InvalidRefreshTokenException;
 import com.krzywdek19.user_service.mapper.UserMapper;
 import com.krzywdek19.user_service.model.User;
 import com.krzywdek19.user_service.model.UserStatus;
@@ -80,7 +81,18 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public TokenResponse refreshToken(RefreshRequest request) {
-        return null;
+        var refreshToken = request.refreshToken();
+        var username = jwtService.extractUsername(refreshToken);
+        var user = userRepository.findByEmail(username)
+                .orElseThrow(() -> new InvalidRefreshTokenException("Invalid refresh token"));
+        if(!jwtService.isTokenValid(refreshToken, user)){
+            throw new InvalidRefreshTokenException("Invalid refresh token");
+        }
+        var newAccessToken = jwtService.generateAccessToken(user);
+        var newRefreshToken = jwtService.generateRefreshToken(user);
+        long expiresIn = jwtProperties.accessDuration();
+
+        return new TokenResponse("Bearer", newAccessToken, expiresIn, newRefreshToken);
     }
 
     @Override
