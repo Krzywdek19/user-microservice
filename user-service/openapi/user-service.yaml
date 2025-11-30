@@ -117,19 +117,6 @@ paths:
                 $ref: '#/components/schemas/TokenResponse'
         '401': { description: Invalid or revoked refresh token }
 
-  /auth/logout:
-    post:
-      tags: [Auth]
-      summary: Logout current session
-      description: |
-        # NOTE: Revokes refresh token / session for the authenticated user. Access token should be discarded client-side.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-      responses:
-        '204': { description: Session revoked }
-        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/password/forgot:
     post:

@@ -47,17 +47,6 @@ public class AuthController {
         return ResponseEntity.ok(token);
     }
 
-    @PostMapping("/logout")
-    public ResponseEntity<Void> logout(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Invalid token");
-        }
-        String token = authHeader.substring(7);
-        authService.logout(token);
-        return ResponseEntity.noContent().build();
-    }
-
     @PostMapping("/password/forgot")
     public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);

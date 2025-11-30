@@ -21,8 +21,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-
 
 @Service
 @RequiredArgsConstructor
@@ -96,17 +94,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void logout(String accessToken) {
-
-    }
-
-    @Override
     public void forgotPassword(ForgotPasswordRequest request) {
+        var user = userRepository.findByEmail(request.email());
 
+        user.ifPresent(resetPasswordService::createAndSendResetToken);
     }
 
     @Override
     public void resetPassword(ResetPasswordRequest request) {
-
+        resetPasswordService.resetPassword(request.token(), request.newPassword());
     }
 }

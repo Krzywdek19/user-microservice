@@ -4,10 +4,11 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 
+
 @Entity
-@Table(name = "email_verification_tokens")
+@Table(name = "password_reset_tokens")
 @NoArgsConstructor
 @SuperBuilder
 @Getter
-public class EmailVerificationToken extends BaseToken {
+public class PasswordResetToken extends BaseToken {
 }

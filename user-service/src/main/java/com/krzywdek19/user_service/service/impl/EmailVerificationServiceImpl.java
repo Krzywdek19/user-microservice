@@ -47,9 +47,6 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     public void verify(String token) {
         var verificationToken = tokenRepository.findByToken(token)
                 .orElseThrow(() -> new InvalidVerificationTokenException("Invalid Verification Token"));
-        if(verificationToken.getUsedAt() != null) {
-            throw new InvalidVerificationTokenException("Token already used");
-        }
 
         if(verificationToken.getExpiresAt().isBefore(Instant.now())){
             throw new InvalidVerificationTokenException("Token has expired");
