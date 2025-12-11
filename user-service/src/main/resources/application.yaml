@@ -1,3 +1,4 @@
+
 spring:
   application:
     name: user-service
@@ -32,3 +33,9 @@ secret:
   access-duration: 3600
   refresh-duration: 86400
   issuer: user-service
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka
+server:
+  port: 8081
