@@ -12,6 +12,7 @@ import com.krzywdek19.user_service.mapper.UserMapper;
 import com.krzywdek19.user_service.model.User;
 import com.krzywdek19.user_service.model.UserStatus;
 import com.krzywdek19.user_service.repository.UserRepository;
+import com.krzywdek19.user_service.security.LoginRateLimiter;
 import com.krzywdek19.user_service.service.AuthService;
 import com.krzywdek19.user_service.service.EmailVerificationService;
 import com.krzywdek19.user_service.service.JwtService;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final EmailVerificationService emailVerificationService;
+    private final LoginRateLimiter loginRateLimiter;
     private final JwtService jwtService;
     private final ResetPasswordService resetPasswordService;
     private final PasswordEncoder passwordEncoder;
@@ -55,12 +57,18 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public TokenResponse login(LoginRequest request) {
+        if(loginRateLimiter.isBlocked(request.email())) {
+            throw new InvalidCredentialsException("Too many login attempts. Please try again later.");
+        }
         var user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            loginRateLimiter.recordFailedAttempt(request.email());
             throw new InvalidCredentialsException("Invalid email or password");
         }
+
+        loginRateLimiter.resetAttempts(request.email());
 
         if (user.getStatus() != UserStatus.ACTIVE) {
             if (user.getStatus() == UserStatus.PENDING) {
