@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class TestController {
-    @GetMapping("/api/v1/workout/test")
+    @GetMapping("/api/v1/workouts/test")
     public ResponseEntity<String> hello(){
         return ResponseEntity.ok("Hello");
     }

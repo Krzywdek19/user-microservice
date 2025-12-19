@@ -72,9 +72,12 @@ public class AuthServiceImpl implements AuthService {
 
         if (user.getStatus() != UserStatus.ACTIVE) {
             if (user.getStatus() == UserStatus.PENDING) {
-                throw new AccountIsNotActiveException("Account is pending for activation");
+                throw new AccountIsNotActiveException("Account pending");
             }
-            throw new AccountIsNotActiveException("Account is blocked");
+            if (user.getStatus() == UserStatus.DELETED) {
+                throw new AccountIsNotActiveException("Account deleted");
+            }
+            throw new AccountIsNotActiveException("Account blocked");
         }
 
         var accessToken = jwtService.generateAccessToken(user);

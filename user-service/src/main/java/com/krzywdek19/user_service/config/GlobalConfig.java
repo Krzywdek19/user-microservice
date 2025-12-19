@@ -18,10 +18,4 @@ public class GlobalConfig {
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
-    @Bean
-    UserDetailsService userDetailsService() {
-        return username -> userRepository.findByEmail(username)
-                .orElseThrow(() -> new UserNotFoundException("User with this username not found"));
-    }
 }

@@ -1,5 +1,3 @@
-server:
-  port: 8080
 spring:
   application:
     name: api-gateway
@@ -10,9 +8,7 @@ spring:
         locator:
           enabled: true
           lower-case-service-id: true
-eureka:
-  client:
-    serviceUrl:
-      defaultZone: http://localhost:8761/eureka
+
 secret:
   key: qK4dYg5j0nH+ZC3X9tqkPj8uQmE2rA7VbIwTzUuO1Hc=
+

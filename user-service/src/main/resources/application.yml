@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: user-service
+
+secret:
+  key: qK4dYg5j0nH+ZC3X9tqkPj8uQmE2rA7VbIwTzUuO1Hc=
+  access-duration: 360000
+  refresh-duration: 86400
+  issuer: user-service
+
+springdoc:
+  swagger-ui:
+    url: /user-service.yaml
+    path: /swagger-ui.html
