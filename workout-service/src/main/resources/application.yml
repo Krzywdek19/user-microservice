@@ -1,3 +1,5 @@
 spring:
   application:
     name: workout-service
+server:
+  port: 8082

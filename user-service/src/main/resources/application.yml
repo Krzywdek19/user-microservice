@@ -12,3 +12,5 @@ springdoc:
   swagger-ui:
     url: /user-service.yaml
     path: /swagger-ui.html
+server:
+  port: 8081
