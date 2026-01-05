@@ -5,94 +5,85 @@ import com.krzywdek19.api_gateway.dto.RegisterRequest;
 import com.krzywdek19.api_gateway.dto.TokenResponse;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
+
+import java.util.Objects;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@AutoConfigureWebTestClient
 @Tag("e2e")
-public class GatewayE2ETest {
-    private final String EMAIL = "test@test.com";
+class GatewayE2ETest {
+
+    private String email = "";
     private final String PASSWORD = "password123";
 
     @Autowired
-    TestRestTemplate restTemplate;
+    WebTestClient webTestClient;
 
     @BeforeEach
     void setUp() {
-        var registerRequest = new RegisterRequest(EMAIL, PASSWORD);
+        email = "testuser+" + System.currentTimeMillis() + "@example.com";
+        var registerRequest = new RegisterRequest(email, PASSWORD);
 
-        restTemplate.postForEntity("/api/v1/auth/register", registerRequest, Void.class);
-    }
-
-    @AfterEach
-    void tearDown() {
-        var login = new LoginRequest(EMAIL, PASSWORD);
-
-        var loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, TokenResponse.class);
-        if (!loginResp.getStatusCode().is2xxSuccessful() || loginResp.getBody() == null) {
-            return;
-        }
-
-        var token = loginResp.getBody().accessToken();
-
-        var headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-
-        restTemplate.exchange(
-                "/api/v1/users/me",
-                HttpMethod.DELETE,
-                new HttpEntity<>(null, headers),
-                Void.class
-        );
+        webTestClient.post()
+                .uri("/api/v1/auth/register")
+                .bodyValue(registerRequest)
+                .exchange()
+                .expectStatus().is2xxSuccessful();
     }
 
     @Test
     void fullAuthFlowShouldWork() {
-        var login = new LoginRequest(EMAIL, PASSWORD);
+        var login = new LoginRequest(email, PASSWORD);
 
-        var tokenResponse = restTemplate.postForEntity("/api/v1/auth/login", login, TokenResponse.class);
-        assertThat(tokenResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(tokenResponse.getBody()).isNotNull();
+        var token = Objects.requireNonNull(webTestClient.post()
+                        .uri("/api/v1/auth/login")
+                        .bodyValue(login)
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectBody(TokenResponse.class)
+                        .returnResult()
+                        .getResponseBody())
+                .accessToken();
 
-        var token = tokenResponse.getBody().accessToken();
-
-        var headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-
-        var entity = new HttpEntity<Void>(null, headers);
-
-        var response = restTemplate.exchange("/api/v1/workouts/test", HttpMethod.GET, entity, String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        webTestClient.get()
+                .uri("/api/v1/workouts/test")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
     void deletedUserShouldNotAccessSecuredEndpoint() {
-        var login = new LoginRequest(EMAIL, PASSWORD);
+        var login = new LoginRequest(email, PASSWORD);
 
-        var loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, TokenResponse.class);
-        assertThat(loginResp.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(loginResp.getBody()).isNotNull();
+        var token = Objects.requireNonNull(webTestClient.post()
+                        .uri("/api/v1/auth/login")
+                        .bodyValue(login)
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectBody(TokenResponse.class)
+                        .returnResult()
+                        .getResponseBody())
+                .accessToken();
 
-        var token = loginResp.getBody().accessToken();
+        webTestClient.delete()
+                .uri("/api/v1/users/me")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus().is2xxSuccessful();
 
-        var headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-
-        var entity = new HttpEntity<Void>(null, headers);
-
-        restTemplate.exchange("/api/v1/users/me", HttpMethod.DELETE, entity, Void.class);
-
-        var response = restTemplate.exchange("/api/v1/workouts/test", HttpMethod.GET, entity, String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        webTestClient.get()
+                .uri("/api/v1/workouts/test")
+                .headers(h -> h.setBearerAuth(token))
+                .exchange()
+                .expectStatus().isForbidden();
     }
 }

@@ -15,8 +15,8 @@ public class UserController {
     private final UserService userService;
 
     @DeleteMapping("/me")
-    public ResponseEntity<Void> deleteCurrentUser(@RequestHeader("X-User-Email") String email) {
-        userService.deleteUserByEmail(email);
+    public ResponseEntity<Void> deleteCurrentUser(@RequestHeader("X-User-Email") String email, @RequestHeader("Authorization") String authorizationHeader) {
+        userService.deleteUserByEmail(email, authorizationHeader);
         return ResponseEntity.noContent().build();
     }
 }

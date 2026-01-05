@@ -1,4 +1,4 @@
-package com.krzywdek19.user_service.E2E;
+package com.krzywdek19.user_service.service.impl;
 
 import com.krzywdek19.user_service.model.User;
 import com.krzywdek19.user_service.model.UserStatus;

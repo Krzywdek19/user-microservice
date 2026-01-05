@@ -1,6 +1,10 @@
 server:
   port: 0
-
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
 eureka:
   instance:
     hostname: localhost

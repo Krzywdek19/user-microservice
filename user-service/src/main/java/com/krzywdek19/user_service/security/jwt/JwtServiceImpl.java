@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -36,9 +37,11 @@ public class JwtServiceImpl implements JwtService {
     }
 
     private String buildToken(UserDetails user, long duration) {
+        String jti = UUID.randomUUID().toString();
         Date now = Date.from(Instant.now());
         Date expiration = Date.from(Instant.now().plusMillis(duration));
         return Jwts.builder()
+                .setId(jti)
                 .setIssuer(jwtProperties.issuer())
                 .setIssuedAt(now)
                 .setExpiration(expiration)
@@ -70,6 +73,15 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    @Override
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
     }
 
     private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
