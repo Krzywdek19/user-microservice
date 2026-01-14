@@ -1,6 +1,8 @@
 package com.krzywdek19.workout_service.service.impl;
 
 import com.krzywdek19.workout_service.exceptions.ActiveWorkoutSessionException;
+import com.krzywdek19.workout_service.exceptions.ResourceNotFoundException;
+import com.krzywdek19.workout_service.exceptions.ResourceOwnershipException;
 import com.krzywdek19.workout_service.model.*;
 import com.krzywdek19.workout_service.model.dto.WorkoutSessionDto;
 import com.krzywdek19.workout_service.model.enums.WorkoutSessionStatus;
@@ -8,13 +10,14 @@ import com.krzywdek19.workout_service.repository.ExerciseSessionRepository;
 import com.krzywdek19.workout_service.repository.SetSessionRepository;
 import com.krzywdek19.workout_service.repository.WorkoutSessionRepository;
 import com.krzywdek19.workout_service.repository.WorkoutTemplateRepository;
-import com.krzywdek19.workout_service.service.SetSessionService;
 import com.krzywdek19.workout_service.service.WorkoutSessionService;
+import com.krzywdek19.workout_service.utils.WorkoutSessionMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     private final WorkoutTemplateRepository workoutTemplateRepository;
     private final ExerciseSessionRepository exerciseSessionRepository;
     private final SetSessionRepository setSessionRepository;
+    private final WorkoutSessionMapper workoutSessionMapper;
 
     /**
      * Starts a workout session for the given user and workout template.
@@ -47,27 +51,62 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
 
         createExerciseAndSetSessions(savedSession, workoutTemplate);
 
-        return new WorkoutSessionDto(savedSession.getId(), workoutTemplateId, savedSession.getStatus().name(),null, null, null);
+        return workoutSessionMapper.toDto(savedSession);
     }
 
     @Override
     public WorkoutSessionDto getSession(String userEmail, UUID sessionId) {
-        return null;
+        var session = workoutSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException(WorkoutSession.class.getName(),sessionId));
+
+        if(!session.getUserEmail().equals(userEmail)) {
+            throw new ResourceOwnershipException(WorkoutSession.class.getName(),sessionId, userEmail);
+        }
+
+        return workoutSessionMapper.toDto(session);
     }
 
     @Override
     public WorkoutSessionDto getActiveSession(String userEmail) {
-        return null;
+        var activeWorkoutSession = workoutSessionRepository
+                .findByUserEmailAndFinishedAtIsNull(userEmail)
+                .orElseThrow(() -> new ActiveWorkoutSessionException("No active workout session found for user: " + userEmail));
+        return workoutSessionMapper.toDto(activeWorkoutSession);
     }
 
     @Override
     public void finishWorkout(String userEmail, UUID sessionId) {
-
+        var session = findAndValidateSession(sessionId, userEmail);
+        session.setStatus(WorkoutSessionStatus.FINISHED);
+        session.setFinishedAt(Instant.now());
+        workoutSessionRepository.save(session);
     }
 
     @Override
     public void abandonWorkout(String userEmail, UUID sessionId) {
+        var session = findAndValidateSession(sessionId, userEmail);
+        session.setStatus(WorkoutSessionStatus.ABANDONED);
+        session.setFinishedAt(Instant.now());
+        workoutSessionRepository.save(session);
+    }
 
+    /**
+     * Finds a workout session by ID and validates that it belongs to the specified user.
+     *
+     * @param sessionId The ID of the workout session to find.
+     * @param userEmail The email of the user to validate against.
+     * @return The found and validated WorkoutSession.
+     * @throws ResourceNotFoundException if the session is not found.
+     * @throws ResourceOwnershipException if the session does not belong to the user.
+     */
+    private WorkoutSession findAndValidateSession(UUID sessionId, String userEmail) {
+        var session = workoutSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException(WorkoutSession.class.getName(), sessionId));
+
+        if (!session.getUserEmail().equals(userEmail)) {
+            throw new ResourceOwnershipException(WorkoutSession.class.getName(), sessionId, userEmail);
+        }
+        return session;
     }
 
     /**
@@ -78,7 +117,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
      */
     private void ensureNoActiveSession(String userEmail) {
         if (workoutSessionRepository.findByUserEmailAndFinishedAtIsNull(userEmail).isPresent()) {
-            throw new ActiveWorkoutSessionException(userEmail);
+            throw new ActiveWorkoutSessionException("user " + userEmail + " already has an active workout session");
         }
     }
 
@@ -90,7 +129,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
      */
     private WorkoutTemplate fetchWorkoutTemplate(UUID workoutTemplateId) {
         return workoutTemplateRepository.findById(workoutTemplateId)
-                .orElseThrow(() -> new EntityNotFoundException("Workout template not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(WorkoutTemplate.class.getName(), workoutTemplateId));
     }
 
     /**
@@ -125,6 +164,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                     .workoutSession(savedSession)
                     .name(template.getName())
                     .orderIndex(template.getOrderIndex())
+                    .setsCount(template.getSetsCount())
                     .build();
             var savedExerciseSession = exerciseSessionRepository.save(exerciseSession);
 
